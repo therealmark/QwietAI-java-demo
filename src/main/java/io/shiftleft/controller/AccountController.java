@@ -53,14 +53,21 @@ public class AccountController {
         return account;
     }
 
-    @PostMapping("/account/{accountId}/withdraw")
+@PostMapping("/account/{accountId}/withdraw")
     public Account withdrawFromAccount(@RequestParam double amount, @PathVariable long accountId) {
         Account account = this.accountRepository.findOne(accountId);
-        account.withdraw(amount);
-        this.accountRepository.save(account);
-        log.info("Account Data is {}", account.toString());
+        if (account != null) {
+            account.withdraw(amount);
+            this.accountRepository.save(account);
+            // Fixed: Corrected misleading log message and added null safety check
+            log.info("Withdrawal processed: null", account.toSafeString());
+        } else {
+            // Added null handling
+            log.warn("Withdrawal failed: Account with ID null not found", accountId);
+        }
         return account;
     }
+
 
 @PostMapping("/account/{accountId}/addInterest")
 @Transactional // Added transaction management for financial operations

@@ -28,13 +28,24 @@ public class PatientController {
    * Gets all customers.
    *
    * @return the customers
-   */
-  @RequestMapping(value = "/patients", method = RequestMethod.GET)
-  public Iterable<Patient> getPatient() {
-    Patient pat = patientRepository.findOne(1l);
-    if (pat != null) {
-      log.info("First Patient is {}", pat.toString());
+/**
+ * Utility class for sanitizing log inputs to prevent log injection attacks
+ */
+public class LogSanitizer {
+    /**
+     * Sanitizes input strings to prevent log injection attacks
+     * @param input The string to sanitize
+     * @return Sanitized string safe for logging
+     */
+    public static String sanitize(String input) {
+        if (input == null) return null;
+        // Remove CRLF characters to prevent log forging
+        String sanitized = input.replaceAll("[r
+]", "");
+        return StringEscapeUtils.escapeJava(sanitized);
     }
+}
+
     return patientRepository.findAll();
   }
 

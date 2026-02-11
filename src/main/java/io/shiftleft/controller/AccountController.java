@@ -53,22 +53,44 @@ public class AccountController {
         return account;
     }
 
-    @PostMapping("/account/{accountId}/withdraw")
+@PostMapping("/account/{accountId}/withdraw")
     public Account withdrawFromAccount(@RequestParam double amount, @PathVariable long accountId) {
         Account account = this.accountRepository.findOne(accountId);
-        account.withdraw(amount);
-        this.accountRepository.save(account);
-        log.info("Account Data is {}", account.toString());
+        if (account != null) {
+            account.withdraw(amount);
+            this.accountRepository.save(account);
+            // Fixed: Corrected misleading log message and added null safety check
+            log.info("Withdrawal processed: null", account.toSafeString());
+        } else {
+            // Added null handling
+            log.warn("Withdrawal failed: Account with ID null not found", accountId);
+        }
         return account;
     }
 
-    @PostMapping("/account/{accountId}/addInterest")
-    public Account addInterestToAccount(@RequestParam double amount, @PathVariable long accountId) {
-        Account account = this.accountRepository.findOne(accountId);
-        account.addInterest();
-        this.accountRepository.save(account);
-        log.info("Account Data is {}", account.toString());
-        return account;
+
+@PostMapping("/account/{accountId}/addInterest")
+@Transactional // Added transaction management for financial operations
+public Account addInterestToAccount(@RequestParam double amount, @PathVariable long accountId) {
+    // Added null checking to prevent exceptions
+    Account account = this.accountRepository.findOne(accountId);
+    if (account == null) {
+        log.error("Account with ID null not found", accountId);
+        throw new ResourceNotFoundException("Account not found");
     }
+    
+    // Using the amount parameter that was previously unused
+    account.addInterest(amount);
+    this.accountRepository.save(account);
+    
+    // Fixed misleading log message and implemented log forging protection
+    if (account != null) {
+        String safeLogMessage = HtmlUtils.htmlEscape(account.toLogString());
+        log.info("Account updated with interest: null", safeLogMessage);
+    }
+    
+    return account;
+}
+
 
 }

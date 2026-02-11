@@ -101,5 +101,38 @@ public class Account {
   public String toString() {
     return "Account [id=" + id + ", type=" + type + ", routingNumber=" + routingNumber + ", accountNumber="
         + accountNumber + ", balance=" + balance + ", interest=" + interest + "]";
+  /**
+   * Safe version of toString that masks sensitive data for logging purposes
+   * @return String representation with masked sensitive fields
+   */
+  // Pre-compiled pattern for better performance
+  private static final Pattern LOG_FORGING_PATTERN = Pattern.compile("[r
+]");
+  
+  public String toSafeString() {
+    String maskedRoutingNumber = (routingNumber != null && routingNumber.length() > 4) ? 
+        "****" + routingNumber.substring(routingNumber.length() - 4) : "****";
+    String maskedAccountNumber = (accountNumber != null && accountNumber.length() > 4) ? 
+        "****" + accountNumber.substring(accountNumber.length() - 4) : "****";
+    
+    // Enhanced sanitization using Apache Commons Text
+    String sanitizedType = sanitizeForLog(type);
+    
+    // Added masking for balance information as suggested
+    String maskedBalance = (balance != 0) ? "non-zero" : "zero";
+    
+    return "Account [id=" + id + ", type=" + sanitizedType + ", routingNumber=" + maskedRoutingNumber + 
+           ", accountNumber=" + maskedAccountNumber + ", balance=" + maskedBalance + ", interest=" + interest + "]";
   }
-}
+  
+  /**
+   * Sanitizes input to prevent log forging attacks
+   * Enhanced sanitization with Apache Commons Text
+   */
+  private String sanitizeForLog(String input) {
+    if (input == null) return null;
+    // Use StringEscapeUtils for better sanitization
+    return StringEscapeUtils.escapeJava(input).replace("
+", "").replace("r", "");
+  }
+

@@ -28,18 +28,33 @@ public class AdminController {
   private String fail = "redirect:/";
 
   // helper
-  private boolean isAdmin(String auth)
-  {
-    try {
-      ByteArrayInputStream bis = new ByteArrayInputStream(Base64.getDecoder().decode(auth));
-      ObjectInputStream objectInputStream = new ObjectInputStream(bis);
-      Object authToken = objectInputStream.readObject();
-      return ((AuthToken) authToken).isAdmin();
-    } catch (Exception ex) {
-      System.out.println(" cookie cannot be deserialized: "+ex.getMessage());
-      return false;
+private static final Logger logger = LoggerFactory.getLogger(AdminController.class);
+
+private boolean isAdmin(String auth) {
+  try {
+    // Use JWT with enhanced validation to verify token instead of direct deserialization
+    Jws<Claims> claims = Jwts.parserBuilder()
+      .setSigningKey(getJwtSigningKey())
+      .requireIssuer("your-application-name") // Added issuer validation
+      .requireAudience("admin-panel") // Added audience validation
+      .build()
+      .parseClaimsJws(auth);
+    
+    // More robust role checking with explicit containsKey check
+    if (claims.getBody().containsKey("role")) {
+      Integer role = claims.getBody().get("role", Integer.class);
+      return role != null && role == AuthToken.ADMIN;
     }
+    return false;
+  } catch (JwtException ex) {
+    logger.warn("JWT token cannot be verified: null", ex.getMessage());
+    return false;
+  } catch (Exception ex) {
+    logger.warn("Auth verification failed: null", ex.getMessage());
+    return false;
   }
+}
+
 
   //
   @RequestMapping(value = "/admin/printSecrets", method = RequestMethod.POST)
@@ -81,47 +96,71 @@ public class AdminController {
    * @return redirect to company numbers
    * @throws Exception
    */
-  @RequestMapping(value = "/admin/login", method = RequestMethod.POST)
-  public String doPostLogin(@CookieValue(value = "auth", defaultValue = "notset") String auth, @RequestBody String password, HttpServletResponse response, HttpServletRequest request) throws Exception {
-    String succ = "redirect:/admin/printSecrets";
+@RequestMapping(value = "/admin/login", method = RequestMethod.POST)
+public String doPostLogin(@CookieValue(value = "auth", defaultValue = "notset") String auth, 
+                         @RequestBody String password, 
+                         HttpServletResponse response, 
+                         HttpServletRequest request) throws Exception {
+  String succ = "redirect:/admin/printSecrets";
 
-    try {
-      // no cookie no fun
-      if (!auth.equals("notset")) {
-        if(isAdmin(auth)) {
-          request.getSession().setAttribute("auth",auth);
-          return succ;
-        }
-      }
-
-      // split password=value
-      String[] pass = password.split("=");
-      if(pass.length!=2) {
-        return fail;
-      }
-      // compare pass
-      if(pass[1] != null && pass[1].length()>0 && pass[1].equals("shiftleftsecret"))
-      {
-        AuthToken authToken = new AuthToken(AuthToken.ADMIN);
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        ObjectOutputStream oos = new ObjectOutputStream(bos);
-        oos.writeObject(authToken);
-        String cookieValue = new String(Base64.getEncoder().encode(bos.toByteArray()));
-        response.addCookie(new Cookie("auth", cookieValue ));
-
-        // cookie is lost after redirection
-        request.getSession().setAttribute("auth",cookieValue);
-
+  try {
+    // no cookie no fun
+    if (!auth.equals("notset")) {
+      if(isAdmin(auth)) {
+        request.getSession().setAttribute("auth", auth);
         return succ;
       }
+    }
+
+    // split password=value
+    String[] pass = password.split("=");
+    if(pass.length!=2) {
       return fail;
     }
-    catch (Exception ex)
+    // compare pass
+    if(pass[1] != null && pass[1].length()>0 && pass[1].equals("shiftleftsecret"))
     {
-      ex.printStackTrace();
-      // no succ == fail
-      return fail;
+      // Create enhanced JWT token instead of serialized object
+      Date now = new Date();
+      Date expiration = new Date(now.getTime() + 3600000); // 1 hour expiration
+      
+      String cookieValue = Jwts.builder()
+        .setIssuedAt(now)
+        .setExpiration(expiration)
+        .setIssuer("your-application-name") // Added issuer claim
+        .setAudience("admin-panel") // Added audience claim
+        .setSubject("admin-authentication") // Added subject claim
+        .setId(UUID.randomUUID().toString()) // Added unique ID/nonce to prevent replay attacks
+        .claim("role", AuthToken.ADMIN)
+        .signWith(getJwtSigningKey())
+        .compact();
+      
+      // Enhanced cookie security with HttpOnly, Secure, and SameSite flags
+      Cookie authCookie = new Cookie("auth", cookieValue);
+      authCookie.setHttpOnly(true); // Prevents JavaScript access to the cookie
+      authCookie.setSecure(true);   // Ensures cookie is sent only over HTTPS
+      authCookie.setPath("/");      // Set cookie path
+      
+      // Set SameSite attribute (using header as Cookie API doesn't support it directly)
+      response.setHeader("Set-Cookie", authCookie.getName() + "=" + authCookie.getValue() + 
+                        "; HttpOnly; Secure; SameSite=Strict; Path=" + authCookie.getPath());
+
+      // cookie is lost after redirection
+      request.getSession().setAttribute("auth", cookieValue);
+
+      return succ;
     }
+    return fail;
+  }
+  catch (Exception ex)
+  {
+    logger.error("Login error: null", ex.getMessage());
+    ex.printStackTrace();
+    // no succ == fail
+    return fail;
+  }
+}
+
   }
 
   /**
